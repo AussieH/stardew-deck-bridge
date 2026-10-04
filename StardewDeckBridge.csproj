@@ -3,7 +3,7 @@
     <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>StardewDeckBridge</AssemblyName>
     <RootNamespace>StardewDeckBridge</RootNamespace>
-    <Version>1.2.1</Version>
+    <Version>1.3.0</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>

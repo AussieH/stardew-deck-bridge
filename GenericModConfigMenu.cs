@@ -28,6 +28,8 @@ internal static class ConfigMenu
             () => "Let Stream Deck keys act in the game: open menus, pick toolbar slots, zoom, change the volume, take screenshots. Information is always shared.");
         gmcm.AddBoolOption(manifest, () => get().WriteStateFile, v => get().WriteStateFile = v, () => "State file for iCUE",
             () => "Also write the same information to %APPDATA%\\StardewDeck\\state.json once a second, for the Stardew Dashboard widget on a CORSAIR XENEON EDGE. Takes effect after the game restarts.");
+        gmcm.AddBoolOption(manifest, () => get().WidgetControls, v => get().WidgetControls = v, () => "Widget controls (iCUE)",
+            () => "Let the Stardew Dashboard widget's tap controls open menus and pick toolbar slots. The mod listens on this computer only (localhost, port 52818) and takes commands only with the key in the state file. Allow actions and Enable cheats apply to the widget exactly as to Stream Deck keys.");
         gmcm.AddKeybindList(manifest, () => get().TodoMenuKey, v => get().TodoMenuKey = v, () => "To-do list key", () => "Opens the to-do list in the game.");
         gmcm.AddNumberOption(manifest, () => get().Port, v => get().Port = v, () => "Port", () => "The port the Stream Deck plugin connects to on 127.0.0.1. Change it in the plugin's Settings too. Takes effect after the game restarts.", 1024, 65535);
 

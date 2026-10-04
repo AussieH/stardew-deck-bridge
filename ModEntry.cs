@@ -15,6 +15,8 @@ public sealed class ModEntry : Mod
     private ModConfig config = new();
     private BridgeServer? server;
     private StateFile? stateFile;
+    private WidgetServer? widget;
+    private readonly string widgetKey = WidgetServer.NewKey();
     private string lastState = "";
     private long seq;
     private int ticksSinceSend;
@@ -39,6 +41,7 @@ public sealed class ModEntry : Mod
         {
             this.stateFile = new StateFile(StateFile.DefaultDir(), this.ModManifest.Version.ToString(), Game1.version, Constants.ApiVersion.ToString(),
                 msg => this.Monitor.Log(msg, LogLevel.Trace));
+            this.ApplyWidgetControls();
             this.stateFile.Begin(firstBody);
             this.Monitor.Log($"Writing {this.stateFile.StatePath} for the Stardew Dashboard widget.", LogLevel.Trace);
         }
@@ -61,7 +64,7 @@ public sealed class ModEntry : Mod
         helper.ConsoleCommands.Add("deck_cart", "Stardew Deck: what the game reports for the traveling cart's stock.", (_, _) => this.Monitor.Log(CartReader.Describe(), LogLevel.Info));
         helper.ConsoleCommands.Add("deck_todo", "Stardew Deck to-do list: deck_todo add <text> | done <id> | remove <id> | clear | list", Todos.ConsoleCommand);
 
-        helper.Events.GameLoop.GameLaunched += (_, _) => ConfigMenu.Register(helper, this.ModManifest, () => this.config, c => { this.config = c; Config = c; }, () => { if (Context.IsWorldReady) this.RefreshDay(); });
+        helper.Events.GameLoop.GameLaunched += (_, _) => ConfigMenu.Register(helper, this.ModManifest, () => this.config, c => { this.config = c; Config = c; }, () => { this.ApplyWidgetControls(); if (Context.IsWorldReady) this.RefreshDay(); });
         helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
         helper.Events.GameLoop.SaveLoaded += (_, _) => { Todos.Load(); DayReader.StartDay(); this.RefreshDay(); this.fileSoon = true; };
         helper.Events.GameLoop.ReturnedToTitle += (_, _) => Todos.Unload();
@@ -91,9 +94,38 @@ public sealed class ModEntry : Mod
         if (disposing)
         {
             this.server?.Dispose();
+            this.widget?.Dispose();
             this.stateFile?.Dispose();
         }
         base.Dispose(disposing);
+    }
+
+    private void ApplyWidgetControls()
+    {
+        if (this.stateFile is null) return;
+        if (!this.config.WidgetControls)
+        {
+            if (this.widget is not null) this.Monitor.Log("Widget controls off: stopped listening on localhost:52818.", LogLevel.Info);
+            this.widget?.Dispose();
+            this.widget = null;
+            this.stateFile.SetControls(StateFile.ControlsJson(false));
+            return;
+        }
+        if (this.widget is not null) return;
+        var w = new WidgetServer(WidgetServer.DefaultPort, this.widgetKey, this.ModManifest.Version.ToString(), msg => this.Monitor.Log(msg, LogLevel.Trace));
+        w.Tick(Context.IsWorldReady, this.config.AllowActions);
+        if (w.Start())
+        {
+            this.widget = w;
+            this.stateFile.SetControls(StateFile.ControlsJson(true, w.Port, key: this.widgetKey));
+            this.Monitor.Log($"Listening for the Stardew Dashboard widget on localhost:{w.Port}.", LogLevel.Info);
+        }
+        else
+        {
+            w.Dispose();
+            this.stateFile.SetControls(StateFile.ControlsJson(true, WidgetServer.DefaultPort, error: "port in use"));
+            this.Monitor.Log($"Could not listen for the Stardew Dashboard widget on localhost:{WidgetServer.DefaultPort}: the port is in use. Is another copy of the game running?", LogLevel.Warn);
+        }
     }
 
     private void RefreshBag()
@@ -130,7 +162,14 @@ public sealed class ModEntry : Mod
         Cheats.Tick();
 
         while (this.server.Incoming.TryDequeue(out var item))
-            this.Handle(item.Client, item.Line);
+            this.Handle(item.Client.Send, item.Line, "Stream Deck");
+
+        if (this.widget is { } widget)
+        {
+            widget.Tick(Context.IsWorldReady, this.config.AllowActions);
+            while (widget.Incoming.TryDequeue(out var cmd))
+                if (cmd.TryClaim()) this.Handle(cmd.Reply, cmd.Line, "iCUE widget");
+        }
 
         if (++this.ticksSinceFarm >= 600) this.RefreshFarm();
 
@@ -166,7 +205,7 @@ public sealed class ModEntry : Mod
         return "{\"type\":\"state\",\"seq\":" + (++this.seq) + ",\"state\":" + body + "}";
     }
 
-    private void Handle(BridgeServer.Client client, string line)
+    private void Handle(Action<string> reply, string line, string who)
     {
         long id = 0;
         try
@@ -180,21 +219,21 @@ public sealed class ModEntry : Mod
 
             if (name == "refresh" && Context.IsWorldReady) this.RefreshFarm();
             string? error = Commands.Run(name, args, this.config.AllowActions, out object? data);
-            client.Send(JsonSerializer.Serialize(new { type = "result", id, ok = error is null, error, data }, Json));
+            reply(JsonSerializer.Serialize(new { type = "result", id, ok = error is null, error, data }, Json));
             if (error is null && data is null)
             {
-                this.Monitor.Log($"Stream Deck: {name}", LogLevel.Trace);
+                this.Monitor.Log($"{who}: {name}", LogLevel.Trace);
                 this.SendState(force: true);
             }
         }
         catch (JsonException)
         {
-            client.Send(JsonSerializer.Serialize(new { type = "result", id, ok = false, error = "bad message" }, Json));
+            reply(JsonSerializer.Serialize(new { type = "result", id, ok = false, error = "bad message" }, Json));
         }
         catch (Exception ex)
         {
             this.Monitor.Log($"Command failed: {ex.Message}", LogLevel.Trace);
-            client.Send(JsonSerializer.Serialize(new { type = "result", id, ok = false, error = "failed in game" }, Json));
+            reply(JsonSerializer.Serialize(new { type = "result", id, ok = false, error = "failed in game" }, Json));
         }
     }
 }

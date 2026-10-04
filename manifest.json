@@ -1,8 +1,8 @@
 {
   "Name": "Stardew Deck Bridge",
   "Author": "TeaTime",
-  "Version": "1.2.1",
-  "Description": "Shares live game information with the Stardew Deck plugin for Elgato Stream Deck, and lets its keys open menus and pick toolbar slots. Only listens on this computer. Also writes it to a file for the Stardew Dashboard iCUE widget.",
+  "Version": "1.3.0",
+  "Description": "Shares live game information with the Stardew Deck plugin for Elgato Stream Deck, and lets its keys open menus and pick toolbar slots. Only listens on this computer. Also writes it to a file for the Stardew Dashboard iCUE widget and takes the widget's taps.",
   "UniqueID": "TeaTime.StardewDeckBridge",
   "EntryDll": "StardewDeckBridge.dll",
   "MinimumApiVersion": "4.0.0",

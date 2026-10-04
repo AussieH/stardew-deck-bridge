@@ -10,6 +10,8 @@ public sealed class ModConfig
 
     public bool WriteStateFile { get; set; } = true;
 
+    public bool WidgetControls { get; set; } = true;
+
     public KeybindList TodoMenuKey { get; set; } = KeybindList.Parse("L");
 
     public string GiftTastes { get; set; } = "all";

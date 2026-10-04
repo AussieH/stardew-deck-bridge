@@ -3,7 +3,7 @@
 The Stardew Valley half of [Stardew Deck](https://teatimeservers.ca/plugins/stardew-deck), a Stream Deck plugin. It
 is a [SMAPI](https://smapi.io) mod: it shares what your farmer can see with the plugin over a socket that only listens
 on this computer, writes the same information to a file for the Stardew Dashboard iCUE widget, and runs the few
-actions the plugin's keys ask for.
+actions the plugin's keys and the widget's tap controls ask for.
 
 It opens no connection to the internet and accepts connections only from this computer. Cheats are off unless you
 turn them on. This repository is here so you can see exactly what it does.
@@ -25,7 +25,8 @@ turn them on. This repository is here so you can see exactly what it does.
 ## What it can do
 
 Each action only does what you could already do with the keyboard or mouse, and none of them run while **Allow
-actions** is off (information is still shared):
+actions** is off (information is still shared). The Stream Deck keys and the Stardew Dashboard widget's tap controls
+ask for them the same way and go through the same code:
 
 - Open a menu (inventory, skills, social, map, crafting, animals, powers, collections, options, the journal or the
   calendar), or close the one that is open.
@@ -59,9 +60,36 @@ settings. It is written once a second and straight away on a new day, a warp or 
 thread, never by the game thread. Each write is whole: a temporary file swapped into place, or, while another program
 holds the file open, rewritten in place. The folder and file are made as soon as SMAPI loads the mod.
 
-`protocol` is the file's format version, then `mod`, `game` and `smapi` versions, `at` (Unix milliseconds), `seq`,
+`protocol` is the file's format version, then `mod`, `game` and `smapi` versions, `controls` (1.3.0: how the widget reaches the widget endpoint, below), `at` (Unix milliseconds), `seq`,
 `ticking` (false while the game stands still, paused out of focus or loading), `running` (written false once when the
 game closes), `state`, and `"end": true` last. Turn it off with **State file for iCUE**.
+
+## The widget endpoint (1.3.0)
+
+For the Stardew Dashboard widget's tap controls (iCUE widgets can make HTTP requests and open WebSockets to a
+`localhost` port their manifest names, once the user allows it), the mod also listens on `localhost:52818`, bound to
+`127.0.0.1` and `::1` only. It takes exactly the commands the socket takes, runs them through the same code on the game
+thread, and answers each with its `result`. Turn it off with **Widget controls (iCUE)**.
+
+A web page you open in a browser could try to reach `localhost:52818` too, so the mod checks every request:
+
+- **Origin:** none (a program on this computer), `file://` or `null` (an iCUE widget). Any other Origin gets `403` and
+  no `Access-Control-*` headers, including its CORS preflight.
+- **Host:** only `localhost:52818`, `127.0.0.1:52818` or `[::1]:52818`, so a site that points its own name at
+  127.0.0.1 (DNS rebinding) is refused.
+- **A key:** each time the game starts the mod makes a random key and writes it into `state.json` as
+  `"controls": {"on": true, "port": 52818, "key": "..."}` (`{"on": false}` while the setting is off). A command without
+  it is refused: the `X-Stardew-Deck` header on a POST (a custom header, which also makes a browser ask first), or
+  `?key=` on the WebSocket. Web pages cannot read the file.
+- **Limits:** 8 KB of headers, 8 KB bodies and messages, 16 connections at once, one request per connection.
+- A command the game thread does not reach within 4 seconds (the game paused in the background, loading) is answered
+  `"game not answering"` and dropped, so it never runs late.
+
+| Request | Answer |
+| --- | --- |
+| `GET /hello` | `{"type":"hello","protocol":1,"mod":"1.3.0","controls":true,"inWorld":true}` (`controls`: whether **Allow actions** is on) |
+| `POST /command` | Body: a command as on the socket, `{"type":"command","id":1,"name":"openMenu","args":{"menu":"map"}}`, with `X-Stardew-Deck: <key>`. Answer: `{"type":"result","id":1,"ok":true,"error":null,"data":null}` |
+| `GET /ws?key=<key>` | A WebSocket: `hello`, then a `status` every 2 seconds (`connected`, `inWorld`, `ticking`, `actions`); send commands, get results |
 
 ## Settings
 
@@ -72,6 +100,7 @@ the mod folder (made the first time the game runs with the mod):
 | --- | --- | --- |
 | Allow actions | `AllowActions` | on |
 | State file for iCUE | `WriteStateFile` | on |
+| Widget controls (iCUE) | `WidgetControls` | on |
 | To-do list key | `TodoMenuKey` | `L` |
 | Port | `Port` | `52817` (change it in the plugin's Settings too) |
 | Gift tastes | `GiftTastes` | `all` (or `revealed`, `off`) |
@@ -88,7 +117,8 @@ the mod folder (made the first time the game runs with the mod):
 1. Install [SMAPI](https://smapi.io) 4.0 or newer (Stardew Valley 1.6).
 2. Download the zip from the [Stardew Deck page](https://teatimeservers.ca/plugins/stardew-deck), close the game and
    unzip it into the game's `Mods` folder, so you have `Mods\StardewDeckBridge\manifest.json`.
-3. Start the game through SMAPI. Its console says `Listening for Stream Deck on 127.0.0.1:52817.`
+3. Start the game through SMAPI. Its console says `Listening for Stream Deck on 127.0.0.1:52817.` and
+   `Listening for the Stardew Dashboard widget on localhost:52818.`
 
 It works alongside other mods, including large expansions.
 

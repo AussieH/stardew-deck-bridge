@@ -1,5 +1,27 @@
 # Stardew Deck Bridge changelog
 
+## 1.3.0 (2026-10-03)
+
+- **Tap controls for the Stardew Dashboard iCUE widget** (1.1.0 and later): a small HTTP and WebSocket endpoint on
+  `localhost:52818`, bound to 127.0.0.1 and ::1 only, takes the same commands as the Stream Deck keys (open a menu,
+  close it, pick a toolbar slot, zoom, the HUD, the to-do list, a screenshot, the volume, and cheats when they are on).
+  They run through exactly the same code on the game thread, under the same Allow actions and Enable cheats settings.
+  - Only this PC's own programs get in: a request whose Origin is a web site is refused (403, and its CORS preflight
+    gets no allow headers), the Host must be `localhost`, `127.0.0.1` or `[::1]` on this port (no DNS rebinding), and a
+    command needs the key the mod writes into `state.json` (new each time the game starts), which a web page cannot
+    read: the `X-Stardew-Deck` header on a POST, `?key=` on the WebSocket. Bodies, headers and messages are capped at
+    8 KB, and no more than 16 connections are open at once.
+  - A command the game thread does not reach within 4 seconds (the game paused out of focus, loading) is answered
+    "game not answering" and dropped, so it never runs late.
+  - `GET /hello` says `{protocol, mod, controls}`; the WebSocket also sends a status heartbeat every 2 seconds
+    (connected, inWorld, ticking, actions).
+  - New setting **Widget controls (iCUE)** (on by default; Generic Mod Config Menu or `WidgetControls` in
+    `config.json`). Saving it in Generic Mod Config Menu starts or stops the endpoint straight away. It needs the state
+    file (the key is in it).
+- `state.json` gains a `controls` object after the versions: `{"on":false}`, `{"on":true,"port":52818,"key":"..."}`, or
+  `{"on":true,"port":52818,"error":"port in use"}`. Its `protocol` stays 1; the rest of the file is unchanged.
+- The socket on 52817 and its protocol are unchanged: Stardew Deck for Stream Deck works as before.
+
 ## 1.2.1 (2026-10-03)
 
 - **The state file is there as soon as the game starts.** The mod now makes `%APPDATA%\StardewDeck\` and writes

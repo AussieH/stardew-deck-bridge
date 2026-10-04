@@ -13,7 +13,8 @@ internal sealed class StateFile : IDisposable
     public readonly string StatePath;
     public readonly string TempPath;
 
-    private readonly string header;
+    private readonly string baseHeader;
+    private volatile string header;
     private readonly int heartbeatMs;
     private readonly int tickingWithinMs;
     private readonly Action<string>? log;
@@ -33,7 +34,8 @@ internal sealed class StateFile : IDisposable
         this.Dir = dir;
         this.StatePath = Path.Combine(dir, "state.json");
         this.TempPath = Path.Combine(dir, "state.json.tmp");
-        this.header = "\"protocol\":" + FileProtocol + ",\"mod\":" + JsonSerializer.Serialize(mod) + ",\"game\":" + JsonSerializer.Serialize(game) + ",\"smapi\":" + JsonSerializer.Serialize(smapi);
+        this.baseHeader = "\"protocol\":" + FileProtocol + ",\"mod\":" + JsonSerializer.Serialize(mod) + ",\"game\":" + JsonSerializer.Serialize(game) + ",\"smapi\":" + JsonSerializer.Serialize(smapi);
+        this.header = this.baseHeader + ",\"controls\":" + ControlsJson(false);
         this.heartbeatMs = heartbeatMs;
         this.tickingWithinMs = tickingWithinMs;
         this.log = log;
@@ -59,6 +61,21 @@ internal sealed class StateFile : IDisposable
     public int InPlaceWrites { get; private set; }
 
     public string Header => this.header;
+
+    public static string ControlsJson(bool on, int port = 0, string? key = null, string? error = null)
+    {
+        if (!on) return "{\"on\":false}";
+        var sb = new StringBuilder("{\"on\":true,\"port\":").Append(port);
+        if (key is not null) sb.Append(",\"key\":").Append(JsonSerializer.Serialize(key));
+        if (error is not null) sb.Append(",\"error\":").Append(JsonSerializer.Serialize(error));
+        return sb.Append('}').ToString();
+    }
+
+    public void SetControls(string controlsJson)
+    {
+        this.header = this.baseHeader + ",\"controls\":" + controlsJson;
+        if (this.running) this.wake.Set();
+    }
 
     public void Begin(string state)
     {
